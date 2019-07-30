@@ -153,7 +153,7 @@ class InteractiveSessionSpec extends FunSpec
       val properties1 = InteractiveSession.prepareBuilderProp(
         Map(RSCConf.Entry.LIVY_JARS.key() -> rscJars1.mkString(",")), Spark, livyConf)
       // if rsc jars are configured both in LivyConf and RSCConf, RSCConf should take precedence.
-      properties1(RSCConf.Entry.LIVY_JARS.key()).split(",").toSet === rscJars1
+      properties1(RSCConf.Entry.LIVY_JARS.key()).split(",").toSet should equal(rscJars1)
     }
 
     it("should set datanucleus jars through livy conf") {
