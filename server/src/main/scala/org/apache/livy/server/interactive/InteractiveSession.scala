@@ -292,8 +292,10 @@ object InteractiveSession extends Logging {
     }
 
     def mergeHiveSiteAndHiveDeps(sparkMajorVersion: Int): Unit = {
-      val yarnFiles = conf.get(LivyConf.SPARK_YARN_DIST_FILES).map(_.split(",")).getOrElse(Array.empty[String])
-      val sparkFiles = conf.get(LivyConf.SPARK_FILES).map(_.split(",")).getOrElse(Array.empty[String])
+      val yarnFiles = conf.get(LivyConf.SPARK_YARN_DIST_FILES).map(_.split(","))
+        .getOrElse(Array.empty[String])
+      val sparkFiles = conf.get(LivyConf.SPARK_FILES).map(_.split(","))
+        .getOrElse(Array.empty[String])
       var files = Array.empty[String]
       if (!sparkFiles.isEmpty || yarnFiles.isEmpty) files = sparkFiles else files = yarnFiles
       hiveSiteFile(files, livyConf) match {
