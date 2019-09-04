@@ -198,33 +198,37 @@ object InteractiveSession extends Logging {
     }
 
     def datanucleusJars(livyConf: LivyConf, sparkMajorVersion: Int): Seq[String] = {
-      if (sys.env.getOrElse("LIVY_INTEGRATION_TEST", "false").toBoolean) {
-        // datanucleus jars has already been in classpath in integration test
-        Seq.empty
-      } else {
-        val sparkHome = livyConf.sparkHome().get
-        val libdir = sparkMajorVersion match {
-          case 2 | 3 =>
-            if (new File(sparkHome, "RELEASE").isFile) {
-              new File(sparkHome, "jars")
-            } else if (new File(sparkHome, "assembly/target/scala-2.11/jars").isDirectory) {
-              new File(sparkHome, "assembly/target/scala-2.11/jars")
-            } else {
-              new File(sparkHome, "assembly/target/scala-2.12/jars")
-            }
-          case v =>
-            throw new RuntimeException(s"Unsupported Spark major version: $sparkMajorVersion")
-        }
-        val jars = if (!libdir.isDirectory) {
-          Seq.empty[String]
+      Option(livyConf.get(LivyConf.DATANUCLEUS_JARS)).map { jars =>
+        jars.split(",").toList
+      }.getOrElse {
+        if (sys.env.getOrElse("LIVY_INTEGRATION_TEST", "false").toBoolean) {
+          // datanucleus jars has already been in classpath in integration test
+          Seq.empty
         } else {
-          libdir.listFiles().filter(_.getName.startsWith("datanucleus-"))
-            .map(_.getAbsolutePath).toSeq
+          val sparkHome = livyConf.sparkHome().get
+          val libdir = sparkMajorVersion match {
+            case 2 | 3 =>
+              if (new File(sparkHome, "RELEASE").isFile) {
+                new File(sparkHome, "jars")
+              } else if (new File(sparkHome, "assembly/target/scala-2.11/jars").isDirectory) {
+                new File(sparkHome, "assembly/target/scala-2.11/jars")
+              } else {
+                new File(sparkHome, "assembly/target/scala-2.12/jars")
+              }
+            case v =>
+              throw new RuntimeException(s"Unsupported Spark major version: $sparkMajorVersion")
+          }
+          val jars = if (!libdir.isDirectory) {
+            Seq.empty[String]
+          } else {
+            libdir.listFiles().filter(_.getName.startsWith("datanucleus-"))
+              .map(_.getAbsolutePath).toSeq
+          }
+          if (jars.isEmpty) {
+            warn("datanucleus jars can not be found")
+          }
+          jars
         }
-        if (jars.isEmpty) {
-          warn("datanucleus jars can not be found")
-        }
-        jars
       }
     }
 
