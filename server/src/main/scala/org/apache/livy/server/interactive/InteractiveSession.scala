@@ -31,7 +31,6 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.util.{Random, Try}
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
-import com.google.common.annotations.VisibleForTesting
 import org.apache.hadoop.fs.Path
 import org.apache.spark.launcher.SparkLauncher
 
@@ -155,7 +154,6 @@ object InteractiveSession extends Logging {
       mockApp)
   }
 
-  @VisibleForTesting
   private[interactive] def prepareBuilderProp(
     conf: Map[String, String],
     kind: Kind,
@@ -200,12 +198,25 @@ object InteractiveSession extends Logging {
     }
 
     def datanucleusJars(livyConf: LivyConf, sparkMajorVersion: Int): Seq[String] = {
-      Option(livyConf.get(LivyConf.DATANUCLEUS_JARS)).map { jars =>
-        jars.split(",").toList
-      }.getOrElse {
-        if (sys.env.getOrElse("LIVY_INTEGRATION_TEST", "false").toBoolean) {
-          // datanucleus jars has already been in classpath in integration test
-          Seq.empty
+      if (sys.env.getOrElse("LIVY_INTEGRATION_TEST", "false").toBoolean) {
+        // datanucleus jars has already been in classpath in integration test
+        Seq.empty
+      } else {
+        val sparkHome = livyConf.sparkHome().get
+        val libdir = sparkMajorVersion match {
+          case 2 | 3 =>
+            if (new File(sparkHome, "RELEASE").isFile) {
+              new File(sparkHome, "jars")
+            } else if (new File(sparkHome, "assembly/target/scala-2.11/jars").isDirectory) {
+              new File(sparkHome, "assembly/target/scala-2.11/jars")
+            } else {
+              new File(sparkHome, "assembly/target/scala-2.12/jars")
+            }
+          case v =>
+            throw new RuntimeException(s"Unsupported Spark major version: $sparkMajorVersion")
+        }
+        val jars = if (!libdir.isDirectory) {
+          Seq.empty[String]
         } else {
           val sparkHome = livyConf.sparkHome().get
           val libdir = sparkMajorVersion match {
@@ -371,6 +382,15 @@ object InteractiveSession extends Logging {
       mergeHiveSiteAndHiveDeps(sparkMajorVersion)
     }
 
+    // Pick all the RSC-specific configs that have not been explicitly set otherwise, and
+    // put them in the resulting properties, so that the remote driver can use them.
+    livyConf.iterator().asScala.foreach { e =>
+      val (key, value) = (e.getKey(), e.getValue())
+      if (key.startsWith(RSCConf.RSC_CONF_PREFIX) && !builderProperties.contains(key)) {
+        builderProperties(key) = value
+      }
+    }
+
     builderProperties
   }
 }
@@ -417,7 +437,12 @@ class InteractiveSession(
     app = mockApp.orElse {
       val driverProcess = client.flatMap { c => Option(c.getDriverProcess) }
         .map(new LineBufferedProcess(_, livyConf.getInt(LivyConf.SPARK_LOGS_SIZE)))
-      driverProcess.map { _ => SparkApp.create(appTag, appId, driverProcess, livyConf, Some(this)) }
+
+      if (livyConf.isRunningOnYarn() || driverProcess.isDefined) {
+        Some(SparkApp.create(appTag, appId, driverProcess, livyConf, Some(this)))
+      } else {
+        None
+      }
     }
 
     if (client.isEmpty) {
@@ -595,6 +620,17 @@ class InteractiveSession(
     // Since these 2 transitions are triggered by different threads, there's a race condition.
     // Make sure we won't transit from dead to error state.
     val areSameStates = serverSideState.getClass() == newState.getClass()
+
+    if (!areSameStates) {
+      newState match {
+        case _: SessionState.Killed | _: SessionState.Dead =>
+          sessionStore.remove(RECOVERY_SESSION_TYPE, id)
+        case SessionState.ShuttingDown =>
+          sessionStore.remove(RECOVERY_SESSION_TYPE, id)
+        case _ =>
+      }
+    }
+
     val transitFromInactiveToActive = !serverSideState.isActive && newState.isActive
     if (!areSameStates && !transitFromInactiveToActive) {
       debug(s"$this session state change from ${serverSideState} to $newState")
@@ -644,4 +680,16 @@ class InteractiveSession(
   }
 
   override def infoChanged(appInfo: AppInfo): Unit = { this.appInfo = appInfo }
+
+  override def lastActivity: Long = {
+    val serverSideLastActivity = super.lastActivity
+    if (serverSideState == SessionState.Running) {
+      // If the rsc client is running, we compare the lastActivity of the session and the repl,
+      // and return the more latest one
+      client.flatMap { s => Option(s.getReplLastActivity) }.filter(_ > serverSideLastActivity)
+        .getOrElse(serverSideLastActivity)
+    } else {
+      serverSideLastActivity
+    }
+  }
 }

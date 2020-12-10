@@ -15,12 +15,17 @@
  * limitations under the License.
  */
 
+function escapeHtml(unescapedText) {
+  return $("<div>").text(unescapedText).html()
+}
+
 function loadSessionsTable(sessions) {
   $.each(sessions, function(index, session) {
     $("#interactive-sessions .sessions-table-body").append(
       "<tr>" +
         tdWrap(uiLink("session/" + session.id, session.id)) +
         tdWrap(appIdLink(session)) +
+        tdWrap(escapeHtml(session.name)) +
         tdWrap(session.owner) +
         tdWrap(session.proxyUser) +
         tdWrap(session.kind) +
@@ -37,6 +42,9 @@ function loadBatchesTable(sessions) {
       "<tr>" +
         tdWrap(session.id) +
         tdWrap(appIdLink(session)) +
+        tdWrap(escapeHtml(session.name)) +
+        tdWrap(session.owner) +
+        tdWrap(session.proxyUser) +
         tdWrap(session.state) +
         tdWrap(logLinks(session, "batch")) +
         "</tr>"

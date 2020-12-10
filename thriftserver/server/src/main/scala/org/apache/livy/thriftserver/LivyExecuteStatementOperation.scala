@@ -137,6 +137,8 @@ class LivyExecuteStatementOperation(
     }
     setState(OperationState.RUNNING)
 
+    val before = System.currentTimeMillis()
+
     try {
       rpcClient.executeSql(sessionHandle, statementId, statement).get()
     } catch {
@@ -147,6 +149,10 @@ class LivyExecuteStatementOperation(
         throw new HiveSQLException(e)
     }
     setState(OperationState.FINISHED)
+
+    val sessionInfo = sessionManager.getSessionInfo(sessionHandle)
+    val after = System.currentTimeMillis()
+    ThriftServerAudit.audit(sessionInfo.username, sessionInfo.ipAddress, statement, before, after)
   }
 
   def close(): Unit = {
@@ -174,7 +180,11 @@ class LivyExecuteStatementOperation(
 
   private def cleanup(state: OperationState) {
     if (statementId != null && rpcClientValid) {
-      rpcClient.cleanupStatement(sessionHandle, statementId).get()
+      val cleaned = rpcClient.cleanupStatement(sessionHandle, statementId).get()
+      if (!cleaned) {
+        warn(s"Fail to cleanup query $statementId (session = ${sessionHandle.getSessionId}), " +
+          "this message can be ignored if the query failed.")
+      }
     }
     setState(state)
   }

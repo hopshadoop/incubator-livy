@@ -18,12 +18,13 @@
 package org.apache.livy.server.interactive
 
 import scala.concurrent.duration._
+import scala.concurrent.Future
 import scala.language.postfixOps
 
 import org.mockito.Mockito.{never, verify, when}
 import org.scalatest.{FunSpec, Matchers}
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.mock.MockitoSugar.mock
+import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.livy.LivyConf
 import org.apache.livy.server.recovery.SessionStore
@@ -71,11 +72,15 @@ class SessionHeartbeatSpec extends FunSpec with Matchers {
       when(expiredSession.id).thenReturn(0)
       when(expiredSession.name).thenReturn(None)
       when(expiredSession.heartbeatExpired).thenReturn(true)
+      when(expiredSession.stop()).thenReturn(Future.successful(()))
+      when(expiredSession.lastActivity).thenReturn(System.nanoTime())
 
       val nonExpiredSession: TestSession = mock[TestSession]
       when(nonExpiredSession.id).thenReturn(1)
       when(nonExpiredSession.name).thenReturn(None)
       when(nonExpiredSession.heartbeatExpired).thenReturn(false)
+      when(nonExpiredSession.stop()).thenReturn(Future.successful(()))
+      when(nonExpiredSession.lastActivity).thenReturn(System.nanoTime())
 
       val n = new TestWatchdog(new LivyConf())
 

@@ -26,19 +26,19 @@ import scala.concurrent.duration.Duration
 import org.mockito.Matchers
 import org.mockito.Matchers.anyObject
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfter, FunSpec, ShouldMatchers}
-import org.scalatest.mock.MockitoSugar.mock
+import org.scalatest.{BeforeAndAfter, FunSpec}
+import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.livy.{LivyBaseUnitTestSuite, LivyConf, Utils}
 import org.apache.livy.server.AccessManager
 import org.apache.livy.server.recovery.SessionStore
 import org.apache.livy.sessions.SessionState
-import org.apache.livy.utils.{AppInfo, SparkApp}
+import org.apache.livy.utils.{AppInfo, Clock, SparkApp}
 
 class BatchSessionSpec
   extends FunSpec
   with BeforeAndAfter
-  with ShouldMatchers
+  with org.scalatest.Matchers
   with LivyBaseUnitTestSuite {
 
   val script: Path = {
@@ -49,6 +49,23 @@ class BatchSessionSpec
       writer.write(
         """
           |print "hello world"
+        """.stripMargin)
+    } finally {
+      writer.close()
+    }
+    script
+  }
+
+  val runForeverScript: Path = {
+    val script = Files.createTempFile("livy-test-run-forever-script", ".py")
+    script.toFile.deleteOnExit()
+    val writer = new FileWriter(script.toFile)
+    try {
+      writer.write(
+        """
+          |import time
+          |while True:
+          | time.sleep(1)
         """.stripMargin)
     } finally {
       writer.close()
@@ -100,6 +117,26 @@ class BatchSessionSpec
       val expectedAppInfo = AppInfo(Some("DRIVER LOG URL"), Some("SPARK UI URL"))
       batch.infoChanged(expectedAppInfo)
       batch.appInfo shouldEqual expectedAppInfo
+    }
+
+
+    it("should end with status killed when batch session was stopped") {
+      val req = new CreateBatchRequest()
+      req.file = runForeverScript.toString
+      req.conf = Map("spark.driver.extraClassPath" -> sys.props("java.class.path"))
+
+      val conf = new LivyConf().set(LivyConf.LOCAL_FS_WHITELIST, sys.props("java.io.tmpdir"))
+      val accessManager = new AccessManager(conf)
+      val batch = BatchSession.create(0, None, req, conf, accessManager, null, None, sessionStore)
+      batch.start()
+      Clock.sleep(2)
+      batch.stopSession()
+
+      Utils.waitUntil({ () => !batch.state.isActive }, Duration(10, TimeUnit.SECONDS))
+      (batch.state match {
+        case SessionState.Killed(_) => true
+        case _ => false
+      }) should be (true)
     }
 
     def testRecoverSession(name: Option[String]): Unit = {

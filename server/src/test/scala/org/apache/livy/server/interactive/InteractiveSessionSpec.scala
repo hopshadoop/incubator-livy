@@ -31,7 +31,7 @@ import org.mockito.Matchers._
 import org.mockito.Mockito.{atLeastOnce, verify, when}
 import org.scalatest.{BeforeAndAfterAll, FunSpec, Matchers}
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.mock.MockitoSugar.mock
+import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.livy.{ExecuteRequest, JobHandle, LivyBaseUnitTestSuite, LivyConf}
 import org.apache.livy.rsc.{PingJob, RSCClient, RSCConf}
@@ -130,7 +130,6 @@ class InteractiveSessionSpec extends FunSpec
         "dummy.jar"))
     }
 
-
     it("should set rsc jars through livy conf") {
       val rscJars = Set(
         "dummy.jar",
@@ -194,6 +193,19 @@ class InteractiveSessionSpec extends FunSpec
       session.state should (be(SessionState.Starting) or be(SessionState.Idle))
     }
 
+    it("should propagate RSC configuration properties") {
+      val livyConf = new LivyConf(false)
+        .set(LivyConf.REPL_JARS, "dummy.jar")
+        .set(RSCConf.Entry.SASL_QOP.key(), "foo")
+        .set(RSCConf.Entry.RPC_CHANNEL_LOG_LEVEL.key(), "TRACE")
+        .set(LivyConf.LIVY_SPARK_VERSION, sys.env("LIVY_SPARK_VERSION"))
+        .set(LivyConf.LIVY_SPARK_SCALA_VERSION, "2.10")
+
+      val properties = InteractiveSession.prepareBuilderProp(Map.empty, Spark, livyConf)
+      assert(properties(RSCConf.Entry.SASL_QOP.key()) === "foo")
+      assert(properties(RSCConf.Entry.RPC_CHANNEL_LOG_LEVEL.key()) === "TRACE")
+    }
+
     withSession("should execute `1 + 2` == 3") { session =>
       val pyResult = executeStatement("1 + 2", Some("pyspark"))
       pyResult should equal (Extraction.decompose(Map(
@@ -249,6 +261,21 @@ class InteractiveSessionSpec extends FunSpec
         val s = session.getStatement(statement.id).get
         s.state.get() shouldBe StatementState.Available
         s.progress should be (1.0)
+      }
+    }
+
+    withSession("should refresh last activity time when statement finished") { session =>
+      val code =
+        """
+          |from time import sleep
+          |sleep(3)
+        """.stripMargin
+      session.executeStatement(ExecuteRequest(code, None))
+      val executionBeginTime = session.lastActivity
+
+      eventually(timeout(10 seconds), interval(100 millis)) {
+        session.state should be(SessionState.Idle)
+        session.lastActivity should be > executionBeginTime
       }
     }
 

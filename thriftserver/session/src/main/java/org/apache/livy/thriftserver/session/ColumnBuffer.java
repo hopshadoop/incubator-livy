@@ -16,7 +16,6 @@
  */
 package org.apache.livy.thriftserver.session;
 
-import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -28,14 +27,6 @@ import java.util.Spliterators;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
-
-import scala.Tuple2;
-import scala.collection.Map;
-import scala.collection.Seq;
-
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.types.StructField;
 
 /**
  * Container for the contents of a single column in a result set.
@@ -101,6 +92,42 @@ public class ColumnBuffer {
     case STRING:
       strings = new String[DEFAULT_SIZE];
       break;
+    }
+  }
+
+  private ColumnBuffer(DataType type, byte[] nulls, Object values, int currentSize) {
+    this.type = type;
+    this.nulls = nulls;
+    this.currentSize = currentSize;
+
+    switch (type) {
+      case BOOLEAN:
+        bools = (boolean[]) values;
+        break;
+      case BYTE:
+        bytes = (byte[]) values;
+        break;
+      case SHORT:
+        shorts = (short[]) values;
+        break;
+      case INTEGER:
+        ints = (int[]) values;
+        break;
+      case LONG:
+        longs = (long[]) values;
+        break;
+      case FLOAT:
+        floats = (float[]) values;
+        break;
+      case DOUBLE:
+        doubles = (double[]) values;
+        break;
+      case BINARY:
+        buffers = (byte[][]) values;
+        break;
+      case STRING:
+        strings = (String[]) values;
+        break;
     }
   }
 
@@ -180,7 +207,7 @@ public class ColumnBuffer {
       buffers[currentSize] = (byte[]) value;
       break;
     case STRING:
-      strings[currentSize] = toHiveString(value, false);
+      strings[currentSize] = (String) value;
       break;
     }
 
@@ -216,6 +243,76 @@ public class ColumnBuffer {
 
   public BitSet getNulls() {
     return nulls != null ? BitSet.valueOf(nulls) : new BitSet();
+  }
+
+  /**
+   * Extract subset data to a new ColumnBuffer. It will remove the extracted data from current
+   * ColumnBuffer.
+   *
+   * @param end index of the end row, exclusive
+   */
+  public ColumnBuffer extractSubset(int end) {
+    if (end > this.currentSize) {
+      end = this.currentSize;
+    }
+    if (end < 0) {
+      end = 0;
+    }
+
+    byte[] subNulls = getNulls().get(0, end).toByteArray();
+    int split = 0;
+    ColumnBuffer subset = null;
+    switch (type) {
+      case BOOLEAN:
+        split = Math.min(bools.length, end);
+        subset = new ColumnBuffer(type, subNulls, Arrays.copyOfRange(bools, 0, split), end);
+        bools = Arrays.copyOfRange(bools, split, bools.length);
+        break;
+      case BYTE:
+        split = Math.min(bytes.length, end);
+        subset = new ColumnBuffer(type, subNulls, Arrays.copyOfRange(bytes, 0, split), end);
+        bytes = Arrays.copyOfRange(bytes, split, bytes.length);
+        break;
+      case SHORT:
+        split = Math.min(shorts.length, end);
+        subset = new ColumnBuffer(type, subNulls, Arrays.copyOfRange(shorts, 0, split), end);
+        shorts = Arrays.copyOfRange(shorts, split, shorts.length);
+        break;
+      case INTEGER:
+        split = Math.min(ints.length, end);
+        subset = new ColumnBuffer(type, subNulls, Arrays.copyOfRange(ints, 0, split), end);
+        ints = Arrays.copyOfRange(ints, split, ints.length);
+        break;
+      case LONG:
+        split = Math.min(longs.length, end);
+        subset = new ColumnBuffer(type, subNulls, Arrays.copyOfRange(longs, 0, split), end);
+        longs = Arrays.copyOfRange(longs, split, longs.length);
+        break;
+      case FLOAT:
+        split = Math.min(floats.length, end);
+        subset = new ColumnBuffer(type, subNulls, Arrays.copyOfRange(floats, 0, split), end);
+        floats = Arrays.copyOfRange(floats, split, floats.length);
+        break;
+      case DOUBLE:
+        split = Math.min(doubles.length, end);
+        subset = new ColumnBuffer(type, subNulls, Arrays.copyOfRange(doubles, 0, split), end);
+        doubles = Arrays.copyOfRange(doubles, split, doubles.length);
+        break;
+      case BINARY:
+        split = Math.min(buffers.length, end);
+        subset = new ColumnBuffer(type, subNulls, Arrays.copyOfRange(buffers, 0, split), end);
+        buffers = Arrays.copyOfRange(buffers, split, buffers.length);
+        break;
+      case STRING:
+        split = Math.min(strings.length, end);
+        subset = new ColumnBuffer(type, subNulls, Arrays.copyOfRange(strings, 0, split), end);
+        strings = Arrays.copyOfRange(strings, split, strings.length);
+        break;
+    }
+    nulls = getNulls().get(end, currentSize).toByteArray();
+    currentSize = currentSize - end;
+
+    return subset;
   }
 
   private boolean isNull(int index) {
@@ -262,57 +359,6 @@ public class ColumnBuffer {
 
     int bitIdx = (index % Byte.SIZE);
     nulls[byteIdx] = (byte) (nulls[byteIdx] | (1 << bitIdx));
-  }
-
-  /**
-   * Converts a value from a Spark dataset into a string that looks like what Hive would
-   * generate. Because Spark generates rows that contain Scala types for non-primitive
-   * columns, this code depends on Scala and is thus succeptible to binary compatibility
-   * changes in the Scala libraries.
-   *
-   * The supported types are described in Spark's SQL programming guide, in the table
-   * listing the mapping of SQL types to Scala types.
-   *
-   * @param value The object to stringify.
-   * @param quoteStrings Whether to wrap String instances in quotes.
-   */
-  private String toHiveString(Object value, boolean quoteStrings) {
-    if (quoteStrings && value instanceof String) {
-      return "\"" + value + "\"";
-    } else if (value instanceof BigDecimal) {
-      return ((BigDecimal) value).stripTrailingZeros().toString();
-    } else if (value instanceof Map) {
-      return stream(new ScalaIterator<>(((Map<?,?>) value).iterator()))
-        .map(o -> toHiveString(o, true))
-        .sorted()
-        .collect(Collectors.joining(",", "{", "}"));
-    } else if (value instanceof Seq) {
-      return stream(new ScalaIterator<>(((Seq<?>) value).iterator()))
-        .map(o -> toHiveString(o, true))
-        .collect(Collectors.joining(",", "[", "]"));
-    } else if (value instanceof Tuple2) {
-      Tuple2 t = (Tuple2) value;
-      return String.format("%s:%s", toHiveString(t._1(), true), toHiveString(t._2(), true));
-    } else if (value instanceof Row) {
-      Row r = (Row) value;
-      final StructField[] fields = r.schema().fields();
-      final AtomicInteger idx = new AtomicInteger();
-
-      return stream(new ScalaIterator<>(r.toSeq().iterator()))
-        .map(o -> {
-          String fname = fields[idx.getAndIncrement()].name();
-          String fval = toHiveString(o, true);
-          return String.format("\"%s\":%s", fname, fval);
-        })
-        .collect(Collectors.joining(",", "{", "}"));
-    } else {
-      return value.toString();
-    }
-  }
-
-  private Stream<?> stream(Iterator<?> it) {
-    return StreamSupport.stream(
-      Spliterators.spliteratorUnknownSize(it, Spliterator.ORDERED), false);
   }
 
   private void ensureCapacity() {

@@ -23,11 +23,11 @@
     <groupId>org.apache.livy</groupId>
     <artifactId>livy-main</artifactId>
     <relativePath>../pom.xml</relativePath>
-    <version>0.6.1.3</version>
+    <version>0.8.0-incubating-SNAPSHOT</version>
   </parent>
 
   <artifactId>livy-integration-test</artifactId>
-  <version>0.6.1.3</version>
+  <version>0.8.0-incubating-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <properties>
@@ -85,9 +85,8 @@
     </dependency>
 
     <dependency>
-      <groupId>com.ning</groupId>
+      <groupId>org.asynchttpclient</groupId>
       <artifactId>async-http-client</artifactId>
-      <version>1.9.38</version>
     </dependency>
 
     <dependency>
@@ -100,6 +99,16 @@
       <groupId>io.hops</groupId>
       <artifactId>hadoop-common</artifactId>
       <classifier>tests</classifier>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.curator</groupId>
+          <artifactId>curator-client</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
     <dependency>
@@ -128,6 +137,13 @@
       <groupId>io.hops</groupId>
       <artifactId>hadoop-yarn-server-tests</artifactId>
       <classifier>tests</classifier>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper</artifactId>
+        </exclusion>
+      </exclusions>
+
     </dependency>
 
     <dependency>
@@ -169,6 +185,26 @@
     <dependency>
       <groupId>org.scalatra</groupId>
       <artifactId>scalatra-test_${scala.binary.version}</artifactId>
+    </dependency>
+
+    <!-- hadoop-common in test scope needs curator-client, but we want to use the proper version -->
+    <dependency>
+      <groupId>org.apache.curator</groupId>
+      <artifactId>curator-client</artifactId>
+      <version>${curator.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <!-- hadoop-common, hadoop-yarn-server-tests and curator needs zookeeper, but we want to use the proper version -->
+    <dependency>
+      <groupId>org.apache.zookeeper</groupId>
+      <artifactId>zookeeper</artifactId>
+      <version>${zookeeper.version}</version>
     </dependency>
 
   </dependencies>
@@ -260,6 +296,7 @@
             <LIVY_INTEGRATION_TEST>true</LIVY_INTEGRATION_TEST>
             <SPARK_HOME>${project.build.directory}/${spark.bin.name}</SPARK_HOME>
             <LIVY_TEST_THRIFT_ENABLED>${livy.test.thrift.enabled}</LIVY_TEST_THRIFT_ENABLED>
+            <PYSPARK_ROW_FIELD_SORTING_ENABLED>true</PYSPARK_ROW_FIELD_SORTING_ENABLED>
           </environmentVariables>
           <systemProperties>
             <cluster.spec>${cluster.spec}</cluster.spec>
@@ -317,6 +354,10 @@
             <exclusion>
               <groupId>org.slf4j</groupId>
               <artifactId>slf4j-log4j12</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>org.apache.hbase</groupId>
+              <artifactId>*</artifactId>
             </exclusion>
           </exclusions>
         </dependency>

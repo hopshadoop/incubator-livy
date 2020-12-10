@@ -20,7 +20,7 @@ package org.apache.livy.server
 import javax.servlet.http.HttpServletRequest
 import javax.servlet.http.HttpServletResponse._
 
-import org.scalatest.mock.MockitoSugar.mock
+import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.livy.LivyConf
 import org.apache.livy.server.recovery.SessionStore
@@ -70,7 +70,10 @@ object SessionServletSpec {
       override protected def clientSessionView(
           session: Session,
           req: HttpServletRequest): Any = {
-        val logs = if (accessManager.hasViewAccess(session.owner, effectiveUser(req))) {
+        val hasViewAccess = accessManager.hasViewAccess(session.owner,
+                                                        effectiveUser(req),
+                                                        session.proxyUser.getOrElse(""))
+        val logs = if (hasViewAccess) {
           session.logLines()
         } else {
           Nil
@@ -294,6 +297,12 @@ class AclsEnabledSessionServletSpec extends BaseSessionServletSpec[Session, Reco
           assert(res.logs === IndexedSeq("log"))
         }
 
+        // LIVY-592: Proxy user cannot view its session log
+        // Proxy user should be able to see its session log
+        jget[MockSessionView](s"/${res.id}", headers = aliceHeaders) { res =>
+          assert(res.logs === IndexedSeq("log"))
+        }
+
         delete(res.id, adminHeaders, SC_OK)
       }
     }
@@ -309,6 +318,12 @@ class AclsEnabledSessionServletSpec extends BaseSessionServletSpec[Session, Reco
         delete(res.id, bobHeaders, SC_FORBIDDEN)
         delete(res.id, viewUserHeaders, SC_FORBIDDEN)
         delete(res.id, modifyUserHeaders, SC_OK)
+      }
+
+      // LIVY-592: Proxy user cannot view its session log
+      // Proxy user should be able to modify its session
+      jpost[MockSessionView]("/?doAs=alice", Map(), headers = adminHeaders) { res =>
+        delete(res.id, aliceHeaders, SC_OK)
       }
     }
 
