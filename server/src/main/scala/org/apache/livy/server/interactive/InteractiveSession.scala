@@ -238,11 +238,11 @@ object InteractiveSession extends Logging {
           if (jars.isEmpty) {
             warn("datanucleus jars can not be found")
           }
-          jars
         }
-      }
+        jars	
+      } 
     }
-
+    
     /**
      * Look for hive-site.xml (for now just ignore spark.files defined in spark-defaults.conf)
      * 1. First look for hive-site.xml in user request
