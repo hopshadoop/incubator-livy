@@ -237,9 +237,10 @@ object InteractiveSession extends Logging {
           }
           if (jars.isEmpty) {
             warn("datanucleus jars can not be found")
+            Seq.empty[String]	    
           }
+          jars
         }
-        jars	
       } 
     }
     
