@@ -112,7 +112,7 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
+      <groupId>${hadoop.group}</groupId>
       <artifactId>hadoop-common</artifactId>
       <scope>provided</scope>
     </dependency>

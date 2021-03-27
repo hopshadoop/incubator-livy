@@ -79,8 +79,9 @@
 
   <properties>
     <asynchttpclient.version>2.10.1</asynchttpclient.version>
-    <hadoop.version>2.7.3</hadoop.version>
-    <hadoop.scope>compile</hadoop.scope>
+    <hadoop.group>io.hops</hadoop.group>
+    <hadoop.version>3.2.0.2</hadoop.version>
+    <hadoop.scope>provided</hadoop.scope>
     <spark.scala-2.11.version>2.4.5</spark.scala-2.11.version>
     <spark.scala-2.12.version>2.4.5</spark.scala-2.12.version>
     <spark.version>${spark.scala-2.11.version}</spark.version>
@@ -194,6 +195,17 @@
       </releases>
       <snapshots>
         <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>Hops</id>
+      <name>Hops Repository</name>
+      <url>https://archiva.hops.works/repository/Hops/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
       </snapshots>
     </repository>
   </repositories>
@@ -329,13 +341,13 @@
       </dependency>
 
       <dependency>
-        <groupId>org.apache.hadoop</groupId>
+        <groupId>${hadoop.group}</groupId>
         <artifactId>hadoop-auth</artifactId>
         <version>${hadoop.version}</version>
       </dependency>
 
       <dependency>
-        <groupId>org.apache.hadoop</groupId>
+        <groupId>${hadoop.group}</groupId>
         <artifactId>hadoop-common</artifactId>
         <version>${hadoop.version}</version>
         <exclusions>
@@ -347,45 +359,45 @@
       </dependency>
 
       <dependency>
-        <groupId>org.apache.hadoop</groupId>
+        <groupId>${hadoop.group}</groupId>
         <artifactId>hadoop-common</artifactId>
         <classifier>tests</classifier>
         <version>${hadoop.version}</version>
       </dependency>
 
       <dependency>
-        <groupId>org.apache.hadoop</groupId>
+        <groupId>${hadoop.group}</groupId>
         <artifactId>hadoop-client</artifactId>
         <version>${hadoop.version}</version>
       </dependency>
 
       <dependency>
-        <groupId>org.apache.hadoop</groupId>
+        <groupId>${hadoop.group}</groupId>
         <artifactId>hadoop-hdfs</artifactId>
         <classifier>tests</classifier>
         <version>${hadoop.version}</version>
       </dependency>
 
       <dependency>
-        <groupId>org.apache.hadoop</groupId>
+        <groupId>${hadoop.group}</groupId>
         <artifactId>hadoop-yarn-api</artifactId>
         <version>${hadoop.version}</version>
       </dependency>
 
       <dependency>
-        <groupId>org.apache.hadoop</groupId>
+        <groupId>${hadoop.group}</groupId>
         <artifactId>hadoop-yarn-client</artifactId>
         <version>${hadoop.version}</version>
       </dependency>
 
       <dependency>
-        <groupId>org.apache.hadoop</groupId>
+        <groupId>${hadoop.group}</groupId>
         <artifactId>hadoop-yarn-common</artifactId>
         <version>${hadoop.version}</version>
       </dependency>
 
       <dependency>
-        <groupId>org.apache.hadoop</groupId>
+        <groupId>${hadoop.group}</groupId>
         <artifactId>hadoop-yarn-server-tests</artifactId>
         <classifier>tests</classifier>
         <version>${hadoop.version}</version>
